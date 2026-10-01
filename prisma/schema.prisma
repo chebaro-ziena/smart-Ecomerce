@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+
+model User {
+  id           String    @id @default(cuid())
+  name         String?
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(CUSTOMER)
+  createdAt    DateTime  @default(now())
+  orders       Order[]
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  slug      String     @unique
+  products  Product[]
+  createdAt DateTime   @default(now())
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  price       Float       @default(0)
+  imageUrl    String
+  tags        String
+  categoryId  String?
+  category    Category?   @relation(fields: [categoryId], references: [id])
+  stock       Int         @default(0)
+  aiGenerated Boolean     @default(false)
+  published   Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  orderItems  OrderItem[]
+
+  @@index([published, createdAt, id])
+  @@index([categoryId, published, createdAt, id])
+  @@index([published, price, id])
+  @@index([published, name, id])
+  @@index([stock])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  status    OrderStatus @default(PENDING)
+  total     Float       @default(0)
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+
+  @@unique([orderId, productId])
+  @@index([orderId])
+  @@index([productId])
+}
+
+

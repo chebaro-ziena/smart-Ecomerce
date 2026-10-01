@@ -1,0 +1,8 @@
+allowBuilds:
+  '@google/genai': false
+  '@prisma/client': false
+  '@prisma/engines': true
+  '@sentry/cli': true
+  esbuild: true
+  prisma: true
+  protobufjs: true
