@@ -12,47 +12,11 @@ enum Role {
   CUSTOMER
 }
 
-
-model User {
-  id           String    @id @default(cuid())
-  name         String?
-  email        String    @unique
-  passwordHash String
-  role         Role      @default(CUSTOMER)
-  createdAt    DateTime  @default(now())
-  orders       Order[]
-}
-
-model Category {
-  id        String     @id @default(cuid())
-  name      String     @unique
-  slug      String     @unique
-  products  Product[]
-  createdAt DateTime   @default(now())
-}
-
-model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String
-  price       Float       @default(0)
-  imageUrl    String
-  tags        String
-  categoryId  String?
-  category    Category?   @relation(fields: [categoryId], references: [id])
-  stock       Int         @default(0)
-  aiGenerated Boolean     @default(false)
-  published   Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  orderItems  OrderItem[]
-
-  @@index([published, createdAt, id])
-  @@index([categoryId, published, createdAt, id])
-  @@index([published, price, id])
-  @@index([published, name, id])
-  @@index([stock])
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
 }
 
 enum OrderStatus {
@@ -63,22 +27,74 @@ enum OrderStatus {
   CANCELLED
 }
 
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  name        String
+  description String
+  price       Float     @default(0)
+  imageUrl    String
+  tags        String
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  stock       Int       @default(0)
+  aiGenerated Boolean   @default(false)
+  published   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([published, createdAt, id])
+  @@index([categoryId, published, createdAt, id])
+  @@index([published, price, id])
+  @@index([published, name, id])
+  @@index([stock])
+}
+
 model Order {
-  id        String      @id @default(cuid())
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
-  status    OrderStatus @default(PENDING)
-  total     Float       @default(0)
-  items     OrderItem[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id     String      @id @default(cuid())
+  userId String
+  user   User        @relation(fields: [userId], references: [id])
+  status OrderStatus @default(PENDING)
+  total  Float       @default(0)
+
+  firstName String?
+  lastName  String?
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+
+  items    OrderItem[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, status, createdAt])
   @@index([status, createdAt])
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   orderId   String
   order     Order   @relation(fields: [orderId], references: [id])
   productId String
@@ -91,4 +107,21 @@ model OrderItem {
   @@index([productId])
 }
 
+model Payment {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
 
+  provider          String
+  providerPaymentId String?
+  amount            Float
+  currency          String        @default("USD")
+  status            PaymentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([provider, providerPaymentId])
+  @@index([status, createdAt])
+}

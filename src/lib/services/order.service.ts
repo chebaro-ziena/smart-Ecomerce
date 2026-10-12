@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import type { CheckoutInput } from "@/lib/validation/checkout";
+
 
 const currentOrderInclude = {
   items: {
@@ -298,3 +301,236 @@ function formatOrder(order: {
   };
 }
 
+export async function prepareCheckout(
+  userId: string,
+  checkout: CheckoutInput,
+) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({
+      where: {
+        userId,
+        status: "PENDING",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new Error("ORDER_NOT_FOUND");
+    }
+
+    if (order.items.length === 0) {
+      throw new Error("EMPTY_ORDER");
+    }
+
+    const productIds = order.items.map((item) => item.productId);
+
+    const products = await tx.product.findMany({
+      where: {
+        id: {
+          in: productIds,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        stock: true,
+        published: true,
+      },
+    });
+
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
+
+    let total = 0;
+
+    for (const item of order.items) {
+      const product = productMap.get(item.productId);
+
+      if (!product || !product.published) {
+        throw new Error("PRODUCT_NOT_AVAILABLE");
+      }
+
+      if (product.stock <= 0) {
+        throw new Error("PRODUCT_OUT_OF_STOCK");
+      }
+
+      if (item.quantity > product.stock) {
+        throw new Error("INSUFFICIENT_STOCK");
+      }
+
+      // Keep the OrderItem price synchronized with
+      // the current Product price.
+      if (item.price !== product.price) {
+        await tx.orderItem.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            price: product.price,
+          },
+        });
+      }
+
+      total += product.price * item.quantity;
+    }
+
+    const updatedOrder = await tx.order.update({
+      where: {
+        id: order.id,
+      },
+      data: {
+        firstName: checkout.firstName,
+        lastName: checkout.lastName,
+        email: checkout.email,
+        phone: checkout.phone,
+        address: checkout.address,
+        city: checkout.city,
+        total,
+      },
+      include: {
+        items: {
+          orderBy: {
+            id: "asc",
+          },
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                imageUrl: true,
+                stock: true,
+                published: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return updatedOrder;
+  });
+}
+
+export async function decreaseProductStock(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  quantity: number,
+) {
+  const result = await tx.product.updateMany({
+    where: {
+      id: productId,
+      published: true,
+      stock: {
+        gte: quantity,
+      },
+    },
+    data: {
+      stock: {
+        decrement: quantity,
+      },
+    },
+  });
+
+  if (result.count !== 1) {
+    throw new Error("INSUFFICIENT_STOCK");
+  }
+}
+
+export async function reserveOrderStock(
+  orderId: string,
+  paymentId?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new Error("ORDER_NOT_FOUND");
+    }
+
+    if (order.items.length === 0) {
+      throw new Error("EMPTY_ORDER");
+    }
+
+    // Already completed successfully.
+    if (order.status === "PAID") {
+      return order;
+    }
+
+    if (order.status !== "PENDING") {
+      throw new Error("ORDER_NOT_PENDING");
+    }
+
+    // If this operation is connected to a payment,
+    // mark that payment as SUCCEEDED inside the same transaction.
+    if (paymentId) {
+      const payment = await tx.payment.findFirst({
+        where: {
+          id: paymentId,
+          orderId: order.id,
+        },
+      });
+
+      if (!payment) {
+        throw new Error("PAYMENT_NOT_FOUND");
+      }
+
+      // Idempotency:
+      // if the payment is already succeeded, don't process it again.
+      if (payment.status === "SUCCEEDED") {
+        throw new Error("PAYMENT_ALREADY_COMPLETED");
+      }
+
+      if (payment.status !== "PENDING") {
+        throw new Error("PAYMENT_NOT_PENDING");
+      }
+
+      await tx.payment.update({
+        where: {
+          id: payment.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "SUCCEEDED",
+        },
+      });
+    }
+
+    // Decrease stock atomically.
+    for (const item of order.items) {
+      await decreaseProductStock(
+        tx,
+        item.productId,
+        item.quantity,
+      );
+    }
+
+    // Mark order as PAID.
+    const updatedOrder = await tx.order.update({
+      where: {
+        id: order.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "PAID",
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    return updatedOrder;
+  });
+}
