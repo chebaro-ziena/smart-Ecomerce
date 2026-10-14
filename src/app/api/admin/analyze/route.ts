@@ -42,10 +42,13 @@ export async function POST(req: NextRequest) {
     const suggestion = await generateProductFromImage(imageDataUrl);
 
     return NextResponse.json({ suggestion });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logError(error, { route: "/api/admin/analyze" });
 
-    if (error?.message?.includes("Gemini_API_KEY")) {
+    const errorMessage =
+      error instanceof Error ? error.message : "";
+
+    if (errorMessage.includes("Gemini_API_KEY")) {
       return NextResponse.json(
         {
           error:
@@ -55,7 +58,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const status = error?.status ?? error?.error?.code;
+    // Safely inspect structured errors returned by an API or SDK.
+    let status: unknown;
+
+    if (typeof error === "object" && error !== null) {
+      const apiError = error as {
+        status?: unknown;
+        error?: { code?: unknown };
+      };
+
+      status = apiError.status ?? apiError.error?.code;
+    }
 
     if (
       status === 429 ||

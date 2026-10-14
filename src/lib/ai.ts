@@ -8,7 +8,31 @@ export interface AiProductSuggestion {
   category: string;
   suggestedPrice: number | null;
 }
+type GenerateContentRequest = Parameters<
+  GoogleGenAI["models"]["generateContent"]
+>[0];
 
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function getErrorStatus(error: unknown): unknown {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  const nestedError = isRecord(error.error)
+    ? error.error
+    : undefined;
+
+  return error.status ?? nestedError?.code;
+}
 /**
  * Model priority:
  *
@@ -81,8 +105,8 @@ function base64FromDataUrl(dataUrl: string): string {
 }
 
 
-function isRetryableError(error: any): boolean {
-  const status = error?.status ?? error?.error?.code;
+function isRetryableError(error: unknown): boolean {
+  const status = getErrorStatus(error);
 
   return (
     status === 429 ||
@@ -107,8 +131,8 @@ function getRetryDelay(attempt: number): number {
 async function generateWithRetry(
   client: GoogleGenAI,
   model: string,
-  contents: any,
-  config: any
+  contents: GenerateContentRequest["contents"],
+  config: GenerateContentRequest["config"]
 ) {
   for (
     let attempt = 1;
@@ -127,48 +151,38 @@ async function generateWithRetry(
         config,
       });
 
-      console.log(
-        `Gemini succeeded using ${model}`
-      );
+      console.log(`Gemini succeeded using ${model}`);
 
       return response;
-    } catch (error: any) {
-      const status =
-        error?.status ?? error?.error?.code;
+    } catch (error: unknown) {
+      const status = getErrorStatus(error);
 
       console.warn(
         `Gemini ${model} failed. ` +
-          `status=${status}, ` +
+          `status=${String(status)}, ` +
           `attempt=${attempt}/${MAX_ATTEMPTS_PER_MODEL}`
       );
 
-    
       if (!isRetryableError(error)) {
         throw error;
       }
 
-      
       if (attempt === MAX_ATTEMPTS_PER_MODEL) {
         throw error;
       }
 
       const delay = getRetryDelay(attempt);
 
-      console.warn(
-        `Retrying ${model} in ${delay}ms...`
-      );
+      console.warn(`Retrying ${model} in ${delay}ms...`);
 
-      await new Promise((resolve) =>
-        setTimeout(resolve, delay)
-      );
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, delay);
+      });
     }
   }
 
-  throw new Error(
-    `Gemini ${model} failed after retries.`
-  );
+  throw new Error(`Gemini ${model} failed after retries.`);
 }
-
 /**
  * Try the available models in order.
  *
@@ -182,33 +196,29 @@ async function generateWithRetry(
  */
 async function generateWithFallback(
   client: GoogleGenAI,
-  contents: any,
-  config: any
+  contents: GenerateContentRequest["contents"],
+  config: GenerateContentRequest["config"]
 ) {
   let lastError: unknown;
 
   for (const model of MODELS) {
     try {
-      const response = await generateWithRetry(
+      return await generateWithRetry(
         client,
         model,
         contents,
         config
       );
-
-      return response;
-    } catch (error: any) {
+    } catch (error: unknown) {
       lastError = error;
 
-      const status =
-        error?.status ?? error?.error?.code;
+      const status = getErrorStatus(error);
 
       console.warn(
         `Model ${model} unavailable. ` +
-          `status=${status}.`
+          `status=${String(status)}.`
       );
 
-      
       Sentry.captureException(error, {
         level: "warning",
         tags: {
@@ -218,13 +228,12 @@ async function generateWithFallback(
         },
       });
 
-      
       if (!isRetryableError(error)) {
         throw error;
       }
 
       console.warn(
-        `Moving to next Gemini fallback model...`
+        "Moving to next Gemini fallback model..."
       );
     }
   }
@@ -324,45 +333,38 @@ function extractJson(text: string): string {
 }
 
 function normalizeSuggestion(
-  parsed: any
+  parsed: unknown
 ): AiProductSuggestion {
+  const data = isRecord(parsed) ? parsed : {};
+
   return {
     name:
-      String(parsed.name ?? "").slice(0, 120) ||
+      String(data.name ?? "").slice(0, 120) ||
       "Untitled Product",
 
     description: String(
-      parsed.description ?? ""
+      data.description ?? ""
     ).slice(0, 2000),
 
-    tags: Array.isArray(parsed.tags)
-      ? parsed.tags
+    tags: Array.isArray(data.tags)
+      ? data.tags
           .map((tag: unknown) =>
-            String(tag)
-              .toLowerCase()
-              .trim()
+            String(tag).toLowerCase().trim()
           )
           .filter(Boolean)
           .slice(0, 10)
       : [],
 
-    category:
-      String(
-        parsed.category ??
-          "Uncategorized"
-      ),
+    category: String(
+      data.category ?? "Uncategorized"
+    ),
 
     suggestedPrice:
-      typeof parsed.suggestedPrice ===
-        "number" &&
-      Number.isFinite(
-        parsed.suggestedPrice
-      )
+      typeof data.suggestedPrice === "number" &&
+      Number.isFinite(data.suggestedPrice)
         ? Math.max(
             0,
-            Math.round(
-              parsed.suggestedPrice * 100
-            ) / 100
+            Math.round(data.suggestedPrice * 100) / 100
           )
         : null,
   };

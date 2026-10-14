@@ -57,9 +57,14 @@ export default function NewProductPage() {
       setCategory(suggestion.category);
       if (suggestion.suggestedPrice != null) setPrice(String(suggestion.suggestedPrice));
       setAiUsed(true);
-    } catch (err: any) {
-      setError(err.message || "AI analysis failed. You can still fill the form manually.");
-    } finally {
+    } catch (error: unknown) {
+        const message =
+          error instanceof Error
+          ? error.message
+          : "An unexpected error occurred";
+
+        console.error(message);
+      }finally {
       setAnalyzing(false);
     }
   }
@@ -90,9 +95,14 @@ export default function NewProductPage() {
 
       router.push("/admin");
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || "Failed to save product");
-    } finally {
+    }catch (error: unknown) {
+      const message =
+        error instanceof Error
+        ? error.message
+        : "An unexpected error occurred";
+
+      console.error(message);
+    }finally {
       setSaving(false);
     }
   }
