@@ -1,0 +1,9 @@
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-sales-report",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}
