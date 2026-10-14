@@ -49,7 +49,7 @@ export default function AdminProductTable({ initialProducts }: { initialProducts
   if (products.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
-        No products yet. Click "+ New product (AI)" to upload your first photo.
+        No products yet. Click &quot;+ New product (AI)&quot; to upload your first photo.
       </div>
     );
   }

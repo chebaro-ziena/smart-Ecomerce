@@ -3,10 +3,19 @@ import * as Sentry from "@sentry/nextjs";
 
 import { requireUser } from "@/lib/auth-session";
 import { createPayment } from "@/lib/services/payment.service";
+import { enforceRateLimit , rateLimiters } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
+    const rateLimitResponse = await enforceRateLimit(
+      rateLimiters.payment,
+      user.id,
+    );
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     const body = await request.json();
 

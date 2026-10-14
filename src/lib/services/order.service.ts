@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { CheckoutInput } from "@/lib/validation/checkout";
+import { OrderStatus } from "@prisma/client";
 
 
 const currentOrderInclude = {
@@ -261,7 +262,7 @@ async function recalculateOrderTotal(orderId: string) {
 
 function formatOrder(order: {
   id: string;
-  status: "PENDING";
+  status: OrderStatus;
   total: number;
   items: Array<{
     id: string;

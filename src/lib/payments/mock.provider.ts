@@ -4,6 +4,7 @@ import type {
 } from "./types";
 
 export async function createMockPayment(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   input: CreatePaymentInput,
 ): Promise<CreatePaymentResult> {
   const providerPaymentId = `mock_${crypto.randomUUID()}`;
