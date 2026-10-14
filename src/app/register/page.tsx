@@ -15,6 +15,10 @@ export default function RegisterPage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  type RegisterResponse = {
+    error?: string;
+    issues?: Record<string, string[]>;
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,7 +45,7 @@ export default function RegisterPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as RegisterResponse;
 
       if (!response.ok) {
         const firstIssue = data.issues

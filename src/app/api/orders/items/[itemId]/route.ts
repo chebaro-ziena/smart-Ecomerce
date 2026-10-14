@@ -7,6 +7,10 @@ import {
   updateOrderItem,
 } from "@/lib/services/order.service";
 import { updateOrderItemSchema } from "@/lib/validation/order";
+import {
+  enforceRateLimit,
+  rateLimiters,
+} from "@/lib/rate-limit";
 
 type RouteContext = {
   params: {
@@ -20,6 +24,14 @@ export async function PATCH(
 ) {
   try {
     const user = await requireUser();
+    const rateLimitResponse = await enforceRateLimit(
+      rateLimiters.cart,
+      user.id,
+    );
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     const body = await request.json();
 
@@ -102,6 +114,14 @@ export async function DELETE(
 ) {
   try {
     const user = await requireUser();
+    const rateLimitResponse = await enforceRateLimit(
+      rateLimiters.cart,
+      user.id,
+    );
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     const order = await removeOrderItem(
       user.id,

@@ -4,10 +4,20 @@ import * as Sentry from "@sentry/nextjs";
 import { requireUser } from "@/lib/auth-session";
 import { prepareCheckout } from "@/lib/services/order.service";
 import { checkoutSchema } from "@/lib/validation/checkout";
+import { enforceRateLimit , rateLimiters } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser();
+
+    const rateLimitResponse = await enforceRateLimit(
+      rateLimiters.checkout,
+      user.id,
+    );
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     const body = await request.json();
 

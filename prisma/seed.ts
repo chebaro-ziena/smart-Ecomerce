@@ -5,7 +5,13 @@ const prisma = new PrismaClient();
 
 async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL;
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || "a";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+  throw new Error(
+    "ADMIN_EMAIL and ADMIN_PASSWORD must be defined in .env"
+  );
+}
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!existing) {
